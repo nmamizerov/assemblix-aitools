@@ -109,6 +109,62 @@ class AssemblixClient:
     async def publish_workflow(self, workflow_id: str) -> Any:
         return await self._request("POST", f"/api/workflows/{workflow_id}/publish")
 
+    # --- execution ---
+    async def execute_workflow(
+        self,
+        workflow_id: str,
+        input: dict,
+        task: bool = False,
+        state: dict | None = None,
+        project_state: dict | None = None,
+        client_id: str | None = None,
+        metadata: dict | None = None,
+    ) -> Any:
+        body = _clean(
+            {
+                "input": input,
+                "task": task,
+                "state": state,
+                "projectState": project_state,
+                "clientId": client_id,
+                "metadata": metadata,
+            }
+        )
+        return await self._request(
+            "POST", f"/api/workflows/{workflow_id}/execute", json=body
+        )
+
+    async def get_task_result(self, execution_id: str) -> Any:
+        return await self._request("GET", f"/api/executions/task/{execution_id}")
+
+    async def list_executions(
+        self,
+        workflow_id: str | None = None,
+        status: str | None = None,
+        date_from: str | None = None,
+        date_to: str | None = None,
+        page: int = 1,
+        limit: int = 50,
+    ) -> Any:
+        params = _clean(
+            {
+                "project_id": self._project_id,
+                "workflow_id": workflow_id,
+                "status": status,
+                "date_from": date_from,
+                "date_to": date_to,
+                "page": page,
+                "limit": limit,
+            }
+        )
+        return await self._request("GET", "/api/executions/", params=params)
+
+    async def get_execution_detail(self, execution_id: str) -> Any:
+        return await self._request("GET", f"/api/executions/{execution_id}")
+
+    async def list_in_flight(self) -> Any:
+        return await self._request("GET", "/api/executions/in-flight")
+
 
 async def fetch_project_id(base_url: str, api_key: str) -> str:
     """Resolve the key's project via the whoami endpoint."""
