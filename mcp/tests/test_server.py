@@ -35,17 +35,11 @@ async def test_get_client_reads_authorization_header_over_http():
         return_value=httpx.Response(200, json=[])
     )
 
-    async def _fake_fetch_project_id(api_url, api_key):
-        return "p1"
-
     fake_request = _FakeRequest(
         {"Authorization": "Bearer sk_from_header", "X-Benign": "yes"}
     )
 
-    with (
-        patch("fastmcp.server.dependencies.get_http_request", return_value=fake_request),
-        patch("assemblix_mcp.server.fetch_project_id", _fake_fetch_project_id),
-    ):
+    with patch("fastmcp.server.dependencies.get_http_request", return_value=fake_request):
         async with MCPClient(mcp) as c:
             result = await c.call_tool("list_workflows", {})
 

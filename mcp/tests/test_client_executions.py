@@ -5,7 +5,7 @@ from assemblix_mcp.client import AssemblixClient
 
 
 def _client():
-    return AssemblixClient(base_url="http://api.test", api_key="sk_k", project_id="p1")
+    return AssemblixClient(base_url="http://api.test", api_key="sk_k")
 
 
 @respx.mock
@@ -37,7 +37,8 @@ async def test_list_executions_snake_query():
     )
     await _client().list_executions(workflow_id="w1")
     params = route.calls.last.request.url.params
-    assert params["project_id"] == "p1"
+    # project_id is never sent — the server derives it from the key.
+    assert "project_id" not in params
     assert params["workflow_id"] == "w1"
 
 

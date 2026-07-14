@@ -11,7 +11,7 @@ def _server():
     mcp = FastMCP("test")
 
     async def get_client():
-        return AssemblixClient(base_url="http://api.test", api_key="sk_k", project_id="p1")
+        return AssemblixClient(base_url="http://api.test", api_key="sk_k")
 
     register_execution_tools(mcp, get_client)
     return mcp

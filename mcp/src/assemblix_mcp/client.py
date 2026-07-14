@@ -1,9 +1,8 @@
 """Thin async HTTP client over the Assemblix REST API.
 
 Wire contract: query params are snake_case; request bodies are camelCase;
-responses are camelCase. ``project_id`` is injected only where the endpoint
-expects it (workflows list query + create body). Id-addressed and key-scoped
-endpoints do not need it.
+responses are camelCase. ``project_id`` is never sent — the server derives it
+from the project-scoped API key.
 """
 
 from __future__ import annotations
@@ -21,9 +20,8 @@ class AssemblixAPIError(Exception):
 
 
 class AssemblixClient:
-    def __init__(self, base_url: str, api_key: str, project_id: str) -> None:
+    def __init__(self, base_url: str, api_key: str) -> None:
         self._base = base_url.rstrip("/")
-        self._project_id = project_id
         self._headers = {"Authorization": f"Bearer {api_key}"}
 
     async def _request(
@@ -55,7 +53,6 @@ class AssemblixClient:
     ) -> Any:
         params = _clean(
             {
-                "project_id": self._project_id,
                 "is_active": is_active,
                 "is_published": is_published,
                 "is_template": is_template,
@@ -76,7 +73,6 @@ class AssemblixClient:
     ) -> Any:
         body = _clean(
             {
-                "projectId": self._project_id,
                 "name": name,
                 "description": description,
                 "nodes": nodes,
@@ -148,7 +144,6 @@ class AssemblixClient:
     ) -> Any:
         params = _clean(
             {
-                "project_id": self._project_id,
                 "workflow_id": workflow_id,
                 "status": status,
                 "date_from": date_from,
@@ -164,18 +159,6 @@ class AssemblixClient:
 
     async def list_in_flight(self) -> Any:
         return await self._request("GET", "/api/executions/in-flight")
-
-
-async def fetch_project_id(base_url: str, api_key: str) -> str:
-    """Resolve the key's project via the whoami endpoint."""
-    async with httpx.AsyncClient(
-        base_url=base_url.rstrip("/"),
-        headers={"Authorization": f"Bearer {api_key}"},
-    ) as http:
-        resp = await http.get("/api/api-keys/whoami")
-    if resp.status_code >= 400:
-        raise AssemblixAPIError(resp.status_code, _extract_detail(resp))
-    return str(resp.json()["projectId"])
 
 
 def _clean(d: dict) -> dict:
