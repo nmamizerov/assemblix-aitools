@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+dist/
+build/
+
+# Tooling / test caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# SDD controller scratch (git-ignored working files)
+.superpowers/
