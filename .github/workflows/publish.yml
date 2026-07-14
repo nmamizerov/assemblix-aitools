@@ -1,0 +1,38 @@
+name: Publish assemblix-mcp to PyPI
+
+# Publishes the mcp/ package to PyPI on a version tag (e.g. mcp-v0.1.1),
+# using PyPI Trusted Publishing (OIDC) — no API token stored anywhere.
+# Bump `version` in mcp/pyproject.toml to match the tag before tagging;
+# PyPI rejects re-uploading an existing version.
+
+on:
+  push:
+    tags:
+      - "mcp-v*"
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write # required for Trusted Publishing (OIDC)
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Run tests
+        run: uv run --active pytest -q
+
+      - name: Build
+        run: |
+          rm -rf dist
+          uv build
+
+      - name: Publish to PyPI (Trusted Publishing)
+        run: uv publish --trusted-publishing always
