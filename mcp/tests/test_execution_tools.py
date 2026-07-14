@@ -62,3 +62,20 @@ async def test_run_and_wait_returns_error_payload_without_raising():
         )
     assert result.data["status"] == "failed"
     assert result.data["error"] == "no credential"
+
+
+@respx.mock
+async def test_run_and_wait_times_out_when_never_terminal():
+    respx.post("http://api.test/api/workflows/w1/execute").mock(
+        return_value=httpx.Response(200, json={"executionId": "e1", "status": "running"})
+    )
+    respx.get("http://api.test/api/executions/task/e1").mock(
+        return_value=httpx.Response(200, json={"executionId": "e1", "status": "running"})
+    )
+    async with MCPClient(_server()) as c:
+        result = await c.call_tool(
+            "run_workflow_and_wait",
+            {"workflow_id": "w1", "input": {"message": "hi"}, "poll_interval": 0, "timeout_seconds": 0.05},
+        )
+    assert result.data["timedOut"] is True
+    assert result.data["status"] == "running"

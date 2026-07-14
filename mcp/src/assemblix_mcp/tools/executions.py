@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 from fastmcp import FastMCP
@@ -64,10 +65,9 @@ def register_execution_tools(mcp: FastMCP, get_client: GetClient) -> None:
         if _is_terminal(started):
             return started
         execution_id = str(started["executionId"])
-        waited = 0.0
-        while waited < timeout_seconds:
+        deadline = time.monotonic() + timeout_seconds
+        while time.monotonic() < deadline:
             await asyncio.sleep(poll_interval)
-            waited += poll_interval
             result = await client.get_task_result(execution_id)
             if _is_terminal(result):
                 return result
