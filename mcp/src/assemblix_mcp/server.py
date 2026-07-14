@@ -16,7 +16,7 @@ def build_server(settings: Settings) -> FastMCP:
     mcp = FastMCP("assemblix")
 
     async def get_client() -> AssemblixClient:
-        headers = get_http_headers() or {}
+        headers = get_http_headers(include={"authorization"}) or {}
         api_key = resolve_api_key(settings, headers.get("authorization"))
         project_id = await fetch_project_id(settings.api_url, api_key)
         return AssemblixClient(
