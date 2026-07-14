@@ -1,0 +1,63 @@
+{
+  "name": "Branching agent",
+  "description": "START -> CONDITION -> two AGENT branches -> END. The condition routes by index; branch edges use sourceHandle source_<conditionId>_<index>.",
+  "nodes": [
+    {
+      "id": "start-1",
+      "type": "start",
+      "position": { "x": 0, "y": 0 },
+      "config": { "firstPhrase": null, "acceptVoice": false }
+    },
+    {
+      "id": "cond-1",
+      "type": "condition",
+      "position": { "x": 320, "y": 0 },
+      "config": {
+        "conditions": [
+          { "name": "mentions bug", "expression": "input.message.contains('bug')" },
+          { "name": "default", "expression": "true" }
+        ]
+      }
+    },
+    {
+      "id": "agent-bug",
+      "type": "agent",
+      "position": { "x": 640, "y": -120 },
+      "config": {
+        "name": "Bug helper",
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "instructions": [
+          { "role": "system", "content": "The user reported a bug. Ask one clarifying question." }
+        ]
+      }
+    },
+    {
+      "id": "agent-default",
+      "type": "agent",
+      "position": { "x": 640, "y": 120 },
+      "config": {
+        "name": "General helper",
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "instructions": [
+          { "role": "system", "content": "Answer the user's message helpfully." }
+        ]
+      }
+    },
+    {
+      "id": "end-1",
+      "type": "end",
+      "position": { "x": 960, "y": 0 },
+      "config": { "name": "Done", "outputMode": "last_agent" }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "start-1", "target": "cond-1" },
+    { "id": "e2", "source": "cond-1", "target": "agent-bug", "sourceHandle": "source_cond-1_0" },
+    { "id": "e3", "source": "cond-1", "target": "agent-default", "sourceHandle": "source_cond-1_1" },
+    { "id": "e4", "source": "agent-bug", "target": "end-1" },
+    { "id": "e5", "source": "agent-default", "target": "end-1" }
+  ],
+  "state": []
+}

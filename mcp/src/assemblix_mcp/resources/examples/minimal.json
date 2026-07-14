@@ -1,0 +1,36 @@
+{
+  "name": "Minimal chat agent",
+  "description": "START -> AGENT -> END. Replies to input.message with an LLM.",
+  "nodes": [
+    {
+      "id": "start-1",
+      "type": "start",
+      "position": { "x": 0, "y": 0 },
+      "config": { "firstPhrase": null, "acceptVoice": false }
+    },
+    {
+      "id": "agent-1",
+      "type": "agent",
+      "position": { "x": 320, "y": 0 },
+      "config": {
+        "name": "Assistant",
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "instructions": [
+          { "role": "system", "content": "You are a helpful assistant. Answer the user's message." }
+        ]
+      }
+    },
+    {
+      "id": "end-1",
+      "type": "end",
+      "position": { "x": 640, "y": 0 },
+      "config": { "name": "Done", "outputMode": "last_agent" }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "start-1", "target": "agent-1" },
+    { "id": "e2", "source": "agent-1", "target": "end-1" }
+  ],
+  "state": []
+}
