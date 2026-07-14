@@ -27,7 +27,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
 
       - name: Run tests
-        run: uv run --active pytest -q
+        run: uv run pytest -q
 
       - name: Build
         run: |
