@@ -23,7 +23,7 @@ async def test_execute_workflow_task_mode_body():
 
 @respx.mock
 async def test_get_task_result():
-    respx.get("http://api.test/api/executions/task/e1").mock(
+    respx.get("http://api.test/api/workflows/task/e1").mock(
         return_value=httpx.Response(200, json={"executionId": "e1", "status": "completed"})
     )
     result = await _client().get_task_result("e1")

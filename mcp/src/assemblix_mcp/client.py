@@ -131,7 +131,9 @@ class AssemblixClient:
         )
 
     async def get_task_result(self, execution_id: str) -> Any:
-        return await self._request("GET", f"/api/executions/task/{execution_id}")
+        # Note: the task-result endpoint lives on the /workflows-prefixed router,
+        # not /executions (unlike list/detail/in-flight below).
+        return await self._request("GET", f"/api/workflows/task/{execution_id}")
 
     async def list_executions(
         self,

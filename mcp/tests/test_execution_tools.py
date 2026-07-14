@@ -32,7 +32,7 @@ async def test_run_and_wait_polls_until_completed():
     respx.post("http://api.test/api/workflows/w1/execute").mock(
         return_value=httpx.Response(200, json={"executionId": "e1", "status": "running"})
     )
-    respx.get("http://api.test/api/executions/task/e1").mock(
+    respx.get("http://api.test/api/workflows/task/e1").mock(
         side_effect=[
             httpx.Response(200, json={"executionId": "e1", "status": "running"}),
             httpx.Response(200, json={"executionId": "e1", "status": "completed", "output": {"a": 1}}),
@@ -52,7 +52,7 @@ async def test_run_and_wait_returns_error_payload_without_raising():
     respx.post("http://api.test/api/workflows/w1/execute").mock(
         return_value=httpx.Response(200, json={"executionId": "e1", "status": "running"})
     )
-    respx.get("http://api.test/api/executions/task/e1").mock(
+    respx.get("http://api.test/api/workflows/task/e1").mock(
         return_value=httpx.Response(200, json={"executionId": "e1", "status": "failed", "error": "no credential"})
     )
     async with MCPClient(_server()) as c:
@@ -69,7 +69,7 @@ async def test_run_and_wait_times_out_when_never_terminal():
     respx.post("http://api.test/api/workflows/w1/execute").mock(
         return_value=httpx.Response(200, json={"executionId": "e1", "status": "running"})
     )
-    respx.get("http://api.test/api/executions/task/e1").mock(
+    respx.get("http://api.test/api/workflows/task/e1").mock(
         return_value=httpx.Response(200, json={"executionId": "e1", "status": "running"})
     )
     async with MCPClient(_server()) as c:
