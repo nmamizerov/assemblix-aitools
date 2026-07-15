@@ -6,11 +6,17 @@ from importlib import resources
 
 from fastmcp import FastMCP
 
-_EXAMPLES = resources.files("assemblix_mcp.resources") / "examples"
+_ROOT = resources.files("assemblix_mcp.resources")
+_EXAMPLES = _ROOT / "examples"
+_GUIDES = _ROOT / "guides"
 
 
 def _load(name: str) -> str:
     return (_EXAMPLES / name).read_text(encoding="utf-8")
+
+
+def _load_guide(name: str) -> str:
+    return (_GUIDES / name).read_text(encoding="utf-8")
 
 
 def register_resources(mcp: FastMCP) -> None:
@@ -26,6 +32,34 @@ def register_resources(mcp: FastMCP) -> None:
         """A START -> CONDITION -> two AGENT branches -> END workflow. Shows how
         condition branch edges use sourceHandle 'source_<conditionId>_<index>'."""
         return _load("branching.json")
+
+    @mcp.resource("assemblix://guides/execution")
+    def execution_guide() -> str:
+        """How to integrate Assemblix workflow execution into a product: the
+        /execute API, sync vs task+polling, SSE streaming, chat sessions, and
+        voice/avatars — with curl/JS/Python examples. Read this before writing
+        any code that calls a workflow (especially streaming)."""
+        return _load_guide("execution.md")
+
+    @mcp.prompt
+    def integrate_workflow() -> str:
+        """Guidance for calling an Assemblix workflow from your own product."""
+        return (
+            "To integrate Assemblix workflow execution into a product (call a "
+            "published workflow, stream tokens, keep a session, send voice):\n"
+            "1. Read the resource assemblix://guides/execution — it is the full "
+            "how-to with exact endpoints and curl/JS/Python examples.\n"
+            "2. Key paths that are easy to get wrong:\n"
+            "   - Run: POST /api/workflows/{workflowId}/execute\n"
+            "   - Poll a task result: GET /api/workflows/task/{executionId} "
+            "(under /api/workflows, NOT /api/executions)\n"
+            "   - Subscribe to the token stream: GET /api/executions/{executionId}/stream "
+            "(SSE; under /api/executions)\n"
+            "3. Streaming = send `stream: true` on execute, then open the SSE stream "
+            "with the returned executionId and read stream_delta events until "
+            "execution_complete; resume with Last-Event-ID after drops.\n"
+            "4. Auth is the same project sk_ key (Bearer); projectId is never sent."
+        )
 
     @mcp.prompt
     def author_workflow() -> str:

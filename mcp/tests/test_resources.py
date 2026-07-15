@@ -37,3 +37,20 @@ async def test_author_prompt_registered():
     async with MCPClient(_server()) as c:
         prompts = await c.list_prompts()
     assert any(p.name == "author_workflow" for p in prompts)
+
+
+async def test_execution_guide_resource_covers_key_paths():
+    async with MCPClient(_server()) as c:
+        contents = await c.read_resource("assemblix://guides/execution")
+    text = contents[0].text
+    # The three easy-to-get-wrong integration facts must be present.
+    assert "/api/workflows/{workflowId}/execute" in text
+    assert "/api/workflows/task/{executionId}" in text  # poll path (not /executions)
+    assert "/api/executions/{executionId}/stream" in text  # SSE path
+    assert "stream_delta" in text
+
+
+async def test_integrate_workflow_prompt_registered():
+    async with MCPClient(_server()) as c:
+        prompts = await c.list_prompts()
+    assert any(p.name == "integrate_workflow" for p in prompts)

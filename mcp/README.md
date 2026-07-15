@@ -60,7 +60,9 @@ For the hosted server, use your client's "add custom connector → URL + header"
 `list_executions`, `get_execution_detail`, `list_in_flight`
 
 **Resources:** `assemblix://examples/minimal`, `assemblix://examples/branching`
-(example workflow JSON). **Prompt:** `author_workflow` (authoring guide).
+(example workflow JSON), `assemblix://guides/execution` (how to call a workflow from
+your product — sync/async/streaming/sessions/voice, with curl/JS/Python examples).
+**Prompts:** `author_workflow` (authoring guide), `integrate_workflow` (integration guide).
 
 Lifecycle: `create_workflow → update_workflow(nodes, edges) → publish_workflow →
 run_workflow`. Runs always execute the **published** snapshot. AGENT nodes need a
