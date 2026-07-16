@@ -241,7 +241,7 @@ have `acceptVoice` enabled, else `400`):
 ```
 POST {BASE}/api/workflows/{workflowId}/execute/audio
 ```
-Parts: `file` (the audio blob, e.g. `.mp3`/`.wav`/`.webm`; transcribed by Whisper) and
+Parts: `file` (the audio blob, e.g. `.mp3`/`.wav`/`.webm`) and
 `payload` (a JSON **string** of the same body as the text route — `input`, `sessionId`,
 `task`, `stream`, …; optional, defaults to `{}`). The transcript is placed into
 `input.message`; the response is the same `ExecutionResponse`.
@@ -252,6 +252,13 @@ curl -X POST {BASE}/api/workflows/{workflowId}/execute/audio \
   -F "file=@question.mp3;type=audio/mpeg" \
   -F 'payload={"createSession": true}'
 ```
+
+> **Audio format vs. model.** `gpt-4o-transcribe` runs a strict validator: it rejects
+> files with an incomplete header — including the streaming WebM a browser's
+> `MediaRecorder` emits — with `400 "Audio file might be corrupted or unsupported"`.
+> `whisper-1` (the default) is lenient. Send a complete-header container (**WAV** or
+> **MP3**); for browser-recorded audio, encode a WAV client-side instead of uploading
+> the raw `MediaRecorder` WebM.
 
 **Voice output** — give an AGENT node `outputType: "voice"`. Non-streaming: the reply
 audio is returned inline on `output.audio` (`{ base64, format, voiceId, model }`) —
