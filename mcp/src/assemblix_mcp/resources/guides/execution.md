@@ -241,24 +241,48 @@ have `acceptVoice` enabled, else `400`):
 ```
 POST {BASE}/api/workflows/{workflowId}/execute/audio
 ```
-Parts: `file` (the audio blob, e.g. `.mp3`/`.wav`/`.webm`) and
-`payload` (a JSON **string** of the same body as the text route — `input`, `sessionId`,
-`task`, `stream`, …; optional, defaults to `{}`). The transcript is placed into
-`input.message`; the response is the same `ExecutionResponse`.
+Parts: `file` (the audio blob) and `payload` (a JSON **string** of the same body as the
+text route — `input`, `sessionId`, `task`, `stream`, …; optional, defaults to `{}`). The
+response is the same `ExecutionResponse`.
 
 ```bash
 curl -X POST {BASE}/api/workflows/{workflowId}/execute/audio \
   -H "Authorization: Bearer sk_..." \
-  -F "file=@question.mp3;type=audio/mpeg" \
+  -F "file=@question.wav;type=audio/wav" \
   -F 'payload={"createSession": true}'
 ```
 
-> **Audio format vs. model.** `gpt-4o-transcribe` runs a strict validator: it rejects
-> files with an incomplete header — including the streaming WebM a browser's
-> `MediaRecorder` emits — with `400 "Audio file might be corrupted or unsupported"`.
-> `whisper-1` (the default) is lenient. Send a complete-header container (**WAV** or
-> **MP3**); for browser-recorded audio, encode a WAV client-side instead of uploading
-> the raw `MediaRecorder` WebM.
+The endpoint does **not** transcribe. It loads the audio into the run and sets
+`input.input_type = "audio"` (text runs get `"text"`) — branch on it in CONDITION CEL.
+Two ways to turn that audio into a reply, composable per graph:
+
+1. **Transcribe node** — an explicit `transcribe` node runs speech-to-text where you place
+   it and normalizes the slot: after it, `input.message` is text and `input.input_type` is
+   `"text"`. Config: `voiceModel` (`{provider, model, credentialId}`) + `saveAsUserMessage`
+   (default `true`, records the transcript as the user turn in chat history). Put it before
+   any non-audio agent, or on a branch that feeds CONDITION / history / a grader.
+
+   ```json
+   { "id": "stt-1", "type": "transcribe",
+     "config": { "voiceModel": { "provider": "openai", "model": "gpt-4o-transcribe" },
+                 "saveAsUserMessage": true } }
+   ```
+
+2. **Audio-direct to a multimodal agent** — point the audio at an AGENT whose model accepts
+   audio natively (Gemini models flagged `acceptsAudio` in `list_node_types`/model catalog).
+   It consumes the audio as-is — no transcribe node, one fewer round-trip. An agent on a
+   **non-audio** model that receives audio fails with an actionable error telling you to add
+   a transcribe node first.
+
+> **Requires the multimodal-voice release.** If `list_node_types` does not include
+> `transcribe`, the deployed core predates this and `/execute/audio` still auto-transcribes
+> into `input.message` at the gate (old behavior).
+
+> **Audio format.** Send a complete-header container — **WAV** or **MP3**. `gpt-4o-transcribe`
+> rejects incomplete-header files (e.g. a browser `MediaRecorder` WebM) with
+> `400 "Audio file might be corrupted or unsupported"`; audio-direct to Gemini accepts
+> wav/mp3/ogg/flac/aiff/aac but **not** webm. For browser-recorded audio, encode WAV
+> client-side rather than uploading raw `MediaRecorder` WebM.
 
 **Voice output** — give an AGENT node `outputType: "voice"`. Non-streaming: the reply
 audio is returned inline on `output.audio` (`{ base64, format, voiceId, model }`) —
