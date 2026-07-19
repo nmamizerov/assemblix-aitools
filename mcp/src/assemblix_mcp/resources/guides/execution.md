@@ -258,10 +258,13 @@ state persist within the session, so turns build on each other. The START node's
 
 ## 6. Voice
 
-**Voice input — just call the audio endpoint.** POST the audio file and it becomes the
-run's input; any multimodal (Gemini) agent then receives the audio directly. The START
-node must have `acceptVoice: true` (else `400`). START does NOT transcribe — it just gates
-and passes the raw audio into the run.
+**Voice input — two ways to send the audio.** Either upload it as multipart to the audio
+endpoint, or embed it as base64 in the normal JSON `/execute` body. Both make the audio the
+run's input; any multimodal agent then receives it directly. The START node must have
+`acceptVoice: true` (else `400`). START does NOT transcribe — it just gates and passes the
+raw audio into the run.
+
+### 6.1 Multipart upload (best for large files)
 
 ```
 POST {BASE}/api/workflows/{workflowId}/execute/audio
@@ -279,18 +282,64 @@ curl -X POST {BASE}/api/workflows/{workflowId}/execute/audio \
   -F 'payload={"input": {}, "createSession": true}'
 ```
 
-The endpoint loads the audio into the run: `input.message` is empty,
+### 6.2 base64 in the JSON body (no multipart)
+
+Send the audio as base64 on the **plain** `/execute` (or `/execute/debug`) route — handy for
+clients that only speak JSON (front-end, MCP-driven flows). Add these top-level fields
+alongside `input`:
+
+| Field | Type | Default | Purpose |
+| --- | --- | --- | --- |
+| `audioBase64` | string | `null` | The audio blob, base64-encoded. Presence marks the run as an audio turn. |
+| `audioMime` | string | `audio/wav` | MIME of the decoded audio (e.g. `audio/wav`, `audio/mpeg`). |
+| `audioFilename` | string | `voice.wav` | Optional original filename. |
+
+```bash
+curl -X POST {BASE}/api/workflows/{workflowId}/execute \
+  -H "Authorization: Bearer sk_..." -H "Content-Type: application/json" \
+  -d '{ "input": {}, "createSession": true,
+        "audioBase64": "UklGR... (base64)", "audioMime": "audio/wav" }'
+```
+
+```python
+import base64, requests
+audio = base64.b64encode(open("question.wav", "rb").read()).decode()
+res = requests.post(
+    f"{BASE}/api/workflows/{workflow_id}/execute",
+    headers={"Authorization": f"Bearer {key}"},
+    json={"input": {}, "audioBase64": audio, "audioMime": "audio/wav"},
+)
+print(res.json()["output"]["message"])
+```
+
+The size cap (`voiceMaxUploadBytes`) applies to the **decoded** bytes; invalid base64 →
+`400`, oversized audio → `413`, a START without `acceptVoice` → `400` — same contract as the
+multipart route. base64 inflates the payload ~33%, so prefer multipart for large recordings.
+Audio runs are always synchronous (they can't be queued), the same as the multipart route.
+
+### 6.3 What the run sees, and how the audio reaches an agent
+
+Both routes load the audio identically: `input.message` is empty,
 `input.input_type = "audio"`, and the audio rides on the run for agents to consume (text
 runs get `input_type = "text"`). Branch on `input.input_type` in CONDITION CEL. The audio
 reaches an agent two ways:
 
 1. **Straight into a multimodal agent (the simple path).** If the agent's model accepts
-   audio natively — **Gemini** models flagged `acceptsAudio` in `list_node_types`
-   (`gemini-2.5-*`, `gemini-3-*`, `gemini-3.1-*`, `gemini-3.5-flash`) — it understands the
-   audio as-is: no transcribe node, one fewer round-trip. This is the default — just point
-   a voice run at a Gemini agent and it works. (Optional agent field `audioInput`: `"auto"`
-   default = audio if the model accepts it, else text · `"audio"` strict · `"text"` strict.
-   A non-audio model that receives audio errors with an actionable message.)
+   audio natively — any model flagged `acceptsAudio` in `list_node_types` — it understands
+   the audio as-is: no transcribe node, one fewer round-trip. Two provider families qualify:
+   - **Gemini** (`gemini-2.5-*`, `gemini-3-*`, `gemini-3.1-*`, `gemini-3.5-flash`) —
+     multimodal both ways: the same agent handles text turns AND audio turns.
+   - **OpenAI `gpt-audio` / `gpt-audio-mini`** — audio-in, text-out. ⚠️ **Audio-only:** these
+     models *require* audio in the request and will `400`
+     (`This model requires that either input content or output modality contain audio`) on a
+     plain text turn. Use `gpt-audio` only in an agent that always receives audio — set that
+     agent's `audioInput: "audio"` and feed it a real audio turn (do NOT put a `transcribe`
+     node before it, which would strip the audio to text). For an agent that must handle both
+     text and audio, use Gemini instead.
+
+   (Optional agent field `audioInput`: `"auto"` default = audio if the model accepts it, else
+   text · `"audio"` strict · `"text"` strict. A non-audio model that receives audio errors
+   with an actionable message.)
 
 2. **Transcribe node → text (for non-audio models / conditions / history).** Place an
    explicit `transcribe` node; it runs STT and turns the audio into text — after it,
