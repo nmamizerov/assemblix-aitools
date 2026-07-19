@@ -80,5 +80,12 @@ def register_resources(mcp: FastMCP) -> None:
             "input usually is {\"message\": \"...\"}.\n"
             "5. Inspect with get_execution_detail / list_executions. AGENT nodes "
             "need a provider credential configured in the Assemblix UI; if missing, "
-            "the run fails with a clear error."
+            "the run fails with a clear error.\n"
+            "6. Voice workflows: set START config acceptVoice=true, then send audio "
+            "(multipart /execute/audio or base64 `audioBase64` on /execute — see "
+            "assemblix://guides/execution §6). For an audio agent use a model flagged "
+            "acceptsAudio in list_node_types: Gemini (handles text AND audio) or OpenAI "
+            "gpt-audio/gpt-audio-mini (audio-ONLY — set that agent's audioInput='audio' and "
+            "always feed audio; a text turn 400s). Otherwise put a transcribe node before a "
+            "text-only agent."
         )
