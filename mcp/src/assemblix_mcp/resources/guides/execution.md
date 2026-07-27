@@ -197,6 +197,8 @@ curl -N {BASE}/api/executions/{executionId}/stream \
   `execution_complete` (final) · node lifecycle (`step_start`/`step_complete`).
 - `data` always has `node_id` + `step_number`, plus the payload: `delta` (text) OR
   `audio` (base64) + `format` + `alignment` (voice). Audio is in **`data.audio`**, not `data.base64`.
+  `audio_delta` also carries `data.avatar` (`true` when the chunk should drive a talking
+  avatar rather than a plain audio player — see §6).
 - `seq` — monotonic; send back as `Last-Event-ID` (or `?cursor=<seq>`) to resume **while
   the buffer is still live**.
 
@@ -331,8 +333,40 @@ to play. Real-time: set the agent's `voice.realtime = true` and run with `stream
 read **`audio_delta`** SSE events — the base64 PCM is in **`data.audio`** (with
 `data.format` `pcm_16000` and optional `data.alignment` for lip-sync), not `data.base64`.
 
-**Avatars** — `outputType: "avatar"` reuses the agent's streamed output to drive a
-talking avatar; run with `stream: true` and subscribe to the SSE stream.
+**Avatars (talking head)** — an AGENT node with `outputType: "avatar"` drives a
+lip-synced video avatar. The avatar runs in **audio passthrough**: it does not use its
+own text-to-speech — it lip-syncs to (and plays) the same realtime PCM your voice output
+already produces. So the avatar always speaks the workflow's own voice.
+
+Prerequisites: the workflow has an avatar **persona** (the face) configured in the
+Assemblix UI (it is workflow-global, stored on the workflow), and the avatar-emitting
+agent has a **realtime voice** (`voice.realtime = true`, a realtime-capable voice model).
+Runs must stream (`stream: true`) — the avatar is fed chunk-by-chunk.
+
+Wiring it into a player is two pieces:
+
+1. **Mint a session token.** Call `POST /api/workflows/{workflowId}/avatar/session` with
+   the same `sk_` Bearer key. It returns `{ provider, sessionToken, videoConfig }`. The
+   token is short-lived and scoped; the avatar provider's API key stays server-side and
+   never reaches the browser. `provider` tells you which browser SDK to load.
+
+2. **Connect the provider SDK in passthrough mode** with that `sessionToken`, disabling
+   its own microphone/voice, and bind it to a `<video>` element. Then run the workflow
+   with `stream: true` and, from the SSE stream, forward the avatar's audio into the
+   SDK's audio-input stream:
+   - `audio_delta` events carry the base64 PCM in `data.audio` (`data.format` =
+     `pcm_16000`: 16 kHz, signed 16-bit LE, mono) — exactly the encoding the avatar's
+     audio-input expects, so you pass the base64 through as-is.
+   - Chunks emitted by an avatar agent are flagged `data.avatar = true`. Route those into
+     the avatar SDK; the avatar plays the sound itself, so do **not** also play them on a
+     local audio player (that would double the audio). Unflagged `audio_delta` (plain
+     voice output) still plays on your own player.
+   - When that node's `step_complete` arrives, end the current audio sequence on the SDK
+     so it knows the utterance finished.
+
+This is provider-agnostic by design: the session response's `provider`/`videoConfig` is
+the only thing that decides which SDK the client uses. Optional `data.alignment` on the
+audio events carries character timings if a provider ever needs them for finer sync.
 
 ## Quick decision guide
 
@@ -341,3 +375,5 @@ talking avatar; run with `stream: true` and subscribe to the SSE stream.
 - Live typing effect / long answers → §4 (`stream:true` + SSE `/api/executions/{id}/stream`).
 - Multi-turn conversation → §5 (`createSession` then reuse `sessionId`).
 - Speech in/out → §6.
+- Talking-head avatar → §6 (avatars): mint `/avatar/session`, then feed avatar-flagged
+  `audio_delta` chunks into the provider SDK in passthrough mode.

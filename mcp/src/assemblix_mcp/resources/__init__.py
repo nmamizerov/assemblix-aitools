@@ -58,7 +58,11 @@ def register_resources(mcp: FastMCP) -> None:
             "3. Streaming = send `stream: true` on execute, then open the SSE stream "
             "with the returned executionId and read stream_delta events until "
             "execution_complete; resume with Last-Event-ID after drops.\n"
-            "4. Auth is the same project sk_ key (Bearer); projectId is never sent."
+            "4. Talking-head avatar: mint a session with "
+            "POST /api/workflows/{workflowId}/avatar/session, connect the returned "
+            "provider SDK in audio-passthrough mode, and feed the avatar-flagged "
+            "audio_delta chunks (data.avatar=true) into it — see guide §6 (avatars).\n"
+            "5. Auth is the same project sk_ key (Bearer); projectId is never sent."
         )
 
     @mcp.prompt
