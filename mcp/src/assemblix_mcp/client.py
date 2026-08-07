@@ -162,6 +162,76 @@ class AssemblixClient:
     async def list_in_flight(self) -> Any:
         return await self._request("GET", "/api/executions/in-flight")
 
+    # --- voice agents ---
+    async def list_voice_agents(self) -> Any:
+        return await self._request("GET", "/api/voice-agents/")
+
+    async def get_voice_agent(self, voice_agent_id: str) -> Any:
+        return await self._request("GET", f"/api/voice-agents/{voice_agent_id}")
+
+    async def create_voice_agent(
+        self, name: str, config: dict, description: str | None = None
+    ) -> Any:
+        body = _clean({"name": name, "description": description, "config": config})
+        return await self._request("POST", "/api/voice-agents/", json=body)
+
+    async def update_voice_agent(
+        self,
+        voice_agent_id: str,
+        name: str | None = None,
+        description: str | None = None,
+        config: dict | None = None,
+        is_active: bool | None = None,
+    ) -> Any:
+        body = _clean(
+            {
+                "name": name,
+                "description": description,
+                "config": config,
+                "isActive": is_active,
+            }
+        )
+        return await self._request(
+            "PATCH", f"/api/voice-agents/{voice_agent_id}", json=body
+        )
+
+    async def delete_voice_agent(self, voice_agent_id: str) -> Any:
+        return await self._request("DELETE", f"/api/voice-agents/{voice_agent_id}")
+
+    # --- voice calls ---
+    async def list_voice_sessions(
+        self, voice_agent_id: str, page: int = 1, limit: int = 50
+    ) -> Any:
+        params = _clean({"page": page, "limit": limit})
+        return await self._request(
+            "GET", f"/api/voice-agents/{voice_agent_id}/sessions", params=params
+        )
+
+    async def get_voice_session(self, voice_session_id: str) -> Any:
+        return await self._request("GET", f"/api/voice-sessions/{voice_session_id}")
+
+    # --- conversation catalog ---
+    # Shared with the workflow-level voice features; `capability=conversation` is
+    # what narrows it to models a voice agent can actually use.
+    async def list_voice_providers(self, capability: str = "conversation") -> Any:
+        return await self._request(
+            "GET", "/api/voice/providers", params={"capability": capability}
+        )
+
+    async def list_voice_provider_models(
+        self, provider: str, capability: str = "conversation"
+    ) -> Any:
+        return await self._request(
+            "GET",
+            f"/api/voice/providers/{provider}/models",
+            params={"capability": capability},
+        )
+
+    async def list_provider_system_voices(self, provider: str) -> Any:
+        return await self._request(
+            "GET", f"/api/voice/providers/{provider}/system-voices"
+        )
+
 
 def _clean(d: dict) -> dict:
     return {k: v for k, v in d.items() if v is not None}
