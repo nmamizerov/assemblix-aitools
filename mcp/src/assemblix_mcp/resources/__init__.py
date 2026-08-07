@@ -41,6 +41,44 @@ def register_resources(mcp: FastMCP) -> None:
         any code that calls a workflow (especially streaming)."""
         return _load_guide("execution.md")
 
+    @mcp.resource("assemblix://guides/voice-agents")
+    def voice_agents_guide() -> str:
+        """How to build a voice agent and put it into a product: what a voice
+        agent is (no graph — unlike voice inside a workflow), minting a call
+        token, the WebSocket audio protocol and the three things people get
+        wrong with it, attaching analysis workflows, and reading calls back.
+        Read this before authoring a voice agent or writing any call client."""
+        return _load_guide("voice-agents.md")
+
+    @mcp.prompt
+    def integrate_voice_agent() -> str:
+        """Guidance for building an Assemblix voice agent and calling it."""
+        return (
+            "To build a voice agent and put it into a product:\n"
+            "1. Read the resource assemblix://guides/voice-agents — it is the full "
+            "how-to, including the WebSocket frame vocabulary.\n"
+            "2. A voice agent has NO graph. It is a prompt plus a voice; workflows "
+            "attach only as background analysis. Do not confuse it with voice "
+            "inside a workflow (the transcribe node), which is a different feature.\n"
+            "3. Author it with list_conversation_voices -> create_voice_agent. Never "
+            "hand-write the nested `config` object; the tools assemble it. A "
+            "provider/model/voice combination not in the catalog is rejected, and "
+            "voice ids are case-sensitive.\n"
+            "4. Write the prompt for speech: short sentences, no markdown, no lists "
+            "the agent would have to read aloud.\n"
+            "5. To call it: POST /api/voice-agents/{id}/sessions on YOUR backend "
+            "with the sk_ key (never in the browser), then open "
+            "wss://…/api/voice-agents/sessions/{token}/stream from the client. The "
+            "token lives 60 seconds and authorizes one call.\n"
+            "6. Three mistakes to avoid: sample rates come from the session.ready "
+            "frame and differ per provider (never resample by hand); capture must "
+            "start only after that frame; on speech.started you must stop() every "
+            "queued audio source or the agent talks over the caller.\n"
+            "7. Iterate on real calls: list_voice_calls -> get_voice_call, read the "
+            "transcript, then update_voice_agent. Guessing from the prompt alone "
+            "does not work."
+        )
+
     @mcp.prompt
     def integrate_workflow() -> str:
         """Guidance for calling an Assemblix workflow from your own product."""
@@ -81,7 +119,7 @@ def register_resources(mcp: FastMCP) -> None:
             "publish_workflow. Runs always execute the PUBLISHED snapshot, so "
             "publish after every change you want to run.\n"
             "4. run_workflow (async, poll get_execution) or run_workflow_and_wait. "
-            "input usually is {\"message\": \"...\"}.\n"
+            'input usually is {"message": "..."}.\n'
             "5. Inspect with get_execution_detail / list_executions. AGENT nodes "
             "need a provider credential configured in the Assemblix UI; if missing, "
             "the run fails with a clear error."
