@@ -9,6 +9,7 @@ from assemblix_mcp.client import AssemblixClient
 from assemblix_mcp.config import Settings, resolve_api_key
 from assemblix_mcp.resources import register_resources
 from assemblix_mcp.tools.executions import register_execution_tools
+from assemblix_mcp.tools.projects import register_project_tools
 from assemblix_mcp.tools.voice_agents import register_voice_agent_tools
 from assemblix_mcp.tools.workflows import register_workflow_tools
 
@@ -22,6 +23,7 @@ def build_server(settings: Settings) -> FastMCP:
         return AssemblixClient(base_url=settings.api_url, api_key=api_key)
 
     register_workflow_tools(mcp, get_client)
+    register_project_tools(mcp, get_client)
     register_execution_tools(mcp, get_client)
     register_voice_agent_tools(mcp, get_client)
     register_resources(mcp)

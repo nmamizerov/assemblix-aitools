@@ -58,6 +58,8 @@ For the hosted server, use your client's "add custom connector → URL + header"
 `create_workflow`, `update_workflow`, `publish_workflow`
 **Run & inspect:** `run_workflow`, `run_workflow_and_wait`, `get_execution`,
 `list_executions`, `get_execution_detail`, `list_in_flight`
+**Project state:** `list_project_state_variables`, `set_project_state_variables`,
+`upsert_project_state_variable`, `delete_project_state_variable`
 **Voice agents:** `list_conversation_voices`, `list_voice_agents`, `get_voice_agent`,
 `create_voice_agent`, `update_voice_agent`, `delete_voice_agent`, `list_voice_calls`,
 `get_voice_call`
