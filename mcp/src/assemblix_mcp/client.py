@@ -44,6 +44,15 @@ class AssemblixClient:
     async def list_node_types(self) -> Any:
         return await self._request("GET", "/api/nodes")
 
+    # --- project state schema ---
+    async def get_project_state_schema(self) -> Any:
+        return await self._request("GET", "/api/projects/state")
+
+    async def set_project_state_schema(self, state_schema: list) -> Any:
+        return await self._request(
+            "PUT", "/api/projects/state", json={"stateSchema": state_schema}
+        )
+
     # --- workflows ---
     async def list_workflows(
         self,

@@ -62,4 +62,6 @@ def test_build_server_registers_all_tools():
         "run_workflow_and_wait",
         "get_execution",
         "list_executions",
+        "list_project_state_variables",
+        "set_project_state_variables",
     } <= names
