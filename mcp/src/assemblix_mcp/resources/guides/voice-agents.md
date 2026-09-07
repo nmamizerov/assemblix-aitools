@@ -27,11 +27,17 @@ hand — the `config` object is nested and easy to get wrong.
 ```
 POST {BASE}/api/voice-agents/{voiceAgentId}/sessions
 Authorization: Bearer sk_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+Content-Type: application/json
+
+{ "clientId": "your-end-user-id" }
 ```
 
 ```json
 { "token": "eyJhbGciOi…", "expiresIn": 60 }
 ```
+
+The body is optional and has exactly one field, `clientId`. Nothing else is read —
+an unknown field is silently dropped, so a typo here fails quietly.
 
 Rules that matter:
 
@@ -41,6 +47,25 @@ Rules that matter:
 - **Mint on the button press, not on page load.** It expires in 60 seconds, and
   that short life is the entire security model.
 - An inactive agent returns `400`.
+
+### Tying a call to one of your users
+
+`clientId` is the same identifier `POST /api/executions` takes, and it means the
+same thing here: everything done under it shares one **client session**, and
+therefore one copy of project state.
+
+Pass it and it is sealed into the token, so it survives into the WebSocket — which
+carries no body of its own. From there it lands on the call and on **every
+analysis workflow the call starts**, per-turn and final alike. Those workflows
+then read and write the same project state your other workflows use for that user,
+which is what makes scoring that accumulates across calls and chats possible.
+
+Omit it and the call is anonymous: the hooks still run, but with no client session,
+so whatever they write to project state has nowhere to persist. Any scoring that
+is supposed to add up over time silently adds up to nothing.
+
+Read and write those variables with `list_project_state_variables` and the rest of
+the project-state tools; a workflow reaches them as `project.<name>`.
 
 ## 2. Open the socket (your frontend)
 
@@ -106,6 +131,7 @@ that fails is logged and dropped; it cannot end a call.
 ```json
 {
   "message": "I'd like to book an appointment for Tuesday",
+  "client_id": "your-end-user-id",
   "voice": {
     "session_id": "…",
     "turn_index": 3,
@@ -119,6 +145,7 @@ that fails is logged and dropped; it cannot end a call.
 ```json
 {
   "message": "user: hello\nassistant: hi, how can I help?\n…",
+  "client_id": "your-end-user-id",
   "voice": {
     "session_id": "…",
     "transcript": [{ "role": "user", "text": "hello" }],
@@ -128,7 +155,11 @@ that fails is logged and dropped; it cannot end a call.
 }
 ```
 
-Reach them from a node as `input.message`, `input.voice.turn_index`, and so on.
+`client_id` is present only if the call was minted with one. It is not readable as
+input — it is what binds the run to a client session, so the workflow reads and
+writes `project.<name>` for that user instead.
+
+Reach the rest from a node as `input.message`, `input.voice.turn_index`, and so on.
 Author these workflows with the workflow tools and `publish_workflow` them —
 runs always execute the published snapshot.
 
@@ -146,8 +177,11 @@ Or, from here, the `list_voice_calls` and `get_voice_call` tools. The detail
 carries the transcript, duration, cost, token counts, and every analysis run with
 an `executionId` you can open with `get_execution_detail`.
 
+Every call carries the `clientId` it was minted with (`null` when it was minted
+without one), so you can group an agent's calls by end-user from the list alone.
+
 Calls placed with a project API key are real; calls placed from the editor carry
-`isDebug: true`.
+`isDebug: true` — the editor's test call is always anonymous.
 
 **Read transcripts before editing a prompt.** What an agent gets wrong on a real
 call is rarely what you would predict from reading its instructions.

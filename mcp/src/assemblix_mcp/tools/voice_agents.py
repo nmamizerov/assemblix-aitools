@@ -115,6 +115,11 @@ def register_voice_agent_tools(mcp: FastMCP, get_client: GetClient) -> None:
         final_workflow_id once when the call ends — both observe only, neither can
         change what the agent says. Author them with the workflow tools first;
         read assemblix://guides/voice-agents for what they receive as input.
+
+        If those workflows are meant to accumulate anything about the caller
+        (a score, a profile, a running total), the call must be minted with a
+        clientId — that is what binds the call and its hook runs to one client
+        session, and so to one copy of project state. The guide covers it.
         """
         client = await get_client()
         return await client.create_voice_agent(
@@ -198,8 +203,8 @@ def register_voice_agent_tools(mcp: FastMCP, get_client: GetClient) -> None:
         voice_agent_id: str, page: int = 1, limit: int = 50
     ) -> Any:
         """List an agent's calls, newest first: when, how long, what it cost, how
-        it ended, and how many lines were spoken. Use get_voice_call for the
-        transcript."""
+        it ended, how many lines were spoken, and the clientId the call was minted
+        with (null if anonymous). Use get_voice_call for the transcript."""
         client = await get_client()
         return await client.list_voice_sessions(voice_agent_id, page=page, limit=limit)
 
