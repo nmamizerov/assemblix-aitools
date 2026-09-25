@@ -46,7 +46,9 @@ def register_resources(mcp: FastMCP) -> None:
         """How to build a voice agent and put it into a product: what a voice
         agent is (no graph — unlike voice inside a workflow), minting a call
         token, the WebSocket audio protocol and the three things people get
-        wrong with it, attaching analysis workflows, and reading calls back.
+        wrong with it, attaching analysis workflows, reading calls back, and
+        avatar calls (a lip-synced face over the server's LiveKit, with a full
+        backend + frontend example).
         Read this before authoring a voice agent or writing any call client."""
         return _load_guide("voice-agents.md")
 
@@ -76,7 +78,13 @@ def register_resources(mcp: FastMCP) -> None:
             "queued audio source or the agent talks over the caller.\n"
             "7. Iterate on real calls: list_voice_calls -> get_voice_call, read the "
             "transcript, then update_voice_agent. Guessing from the prompt alone "
-            "does not work."
+            "does not work.\n"
+            "8. For a face: list_avatars(credential_id) -> update_voice_agent with "
+            "avatar_credential_id/avatar_id/avatar_model. The call then also returns "
+            "`media` (a LiveKit room): the client joins it and publishes the mic "
+            "BEFORE opening the WebSocket, and the WebSocket carries control frames "
+            "only. Follow guide section 8 exactly — the client never talks to the "
+            "avatar vendor."
         )
 
     @mcp.prompt
