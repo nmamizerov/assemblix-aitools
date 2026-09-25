@@ -60,15 +60,15 @@ For the hosted server, use your client's "add custom connector → URL + header"
 `list_executions`, `get_execution_detail`, `list_in_flight`
 **Project state:** `list_project_state_variables`, `set_project_state_variables`,
 `upsert_project_state_variable`, `delete_project_state_variable`
-**Voice agents:** `list_conversation_voices`, `list_voice_agents`, `get_voice_agent`,
-`create_voice_agent`, `update_voice_agent`, `delete_voice_agent`, `list_voice_calls`,
-`get_voice_call`
+**Voice agents:** `list_conversation_voices`, `list_avatars`, `list_voice_agents`,
+`get_voice_agent`, `create_voice_agent`, `update_voice_agent`, `delete_voice_agent`,
+`list_voice_calls`, `get_voice_call`
 
 **Resources:** `assemblix://examples/minimal`, `assemblix://examples/branching`
 (example workflow JSON), `assemblix://guides/execution` (how to call a workflow from
 your product — sync/async/streaming/sessions/voice, with curl/JS/Python examples),
 `assemblix://guides/voice-agents` (what a voice agent is, the call WebSocket protocol,
-analysis hooks, reading calls back).
+analysis hooks, reading calls back, avatar calls over LiveKit).
 **Prompts:** `author_workflow`, `integrate_workflow`, `integrate_voice_agent`.
 
 Workflow lifecycle: `create_workflow → update_workflow(nodes, edges) →

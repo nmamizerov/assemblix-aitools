@@ -2,7 +2,8 @@
 
 How to put a **voice agent** into your own product: mint a call token on your
 backend, open the WebSocket from your frontend, stream audio both ways, attach
-workflows that analyse the conversation, and read calls back afterwards.
+workflows that analyse the conversation, and read calls back afterwards. An agent
+can also have a lip-synced **avatar**; that call shape is covered in §8.
 
 > Source of truth: this mirrors the public docs pages `docs/voice-agents/*`.
 > `BASE` is your instance base URL (the same `ASSEMBLIX_API_URL` the MCP uses,
@@ -33,8 +34,11 @@ Content-Type: application/json
 ```
 
 ```json
-{ "token": "eyJhbGciOi…", "expiresIn": 60 }
+{ "token": "eyJhbGciOi…", "expiresIn": 60, "media": null }
 ```
+
+`media` is `null` for a voice-only agent. For an agent with an avatar it carries a
+LiveKit room to join — see §8. Forward it to your frontend together with `token`.
 
 The body is optional and has exactly one field, `clientId`. Nothing else is read —
 an unknown field is silently dropped, so a typo here fails quietly.
@@ -87,13 +91,13 @@ why the token is in the path.
 
 | Frame | Meaning |
 | --- | --- |
-| `{"type":"session.ready","inputSampleRate":N,"outputSampleRate":N}` | Connected. Send no audio before this. |
+| `{"type":"session.ready","inputSampleRate":N,"outputSampleRate":N,"media":"ws"}` | Connected. Send no audio before this. `media` is `"livekit"` on an avatar call (§8). |
 | binary | Agent speech, PCM16 mono at `outputSampleRate` |
 | `{"type":"transcript","role":"user"\|"assistant","text":"…","isFinal":bool}` | Captions; non-final frames replace the previous one |
 | `{"type":"speech.started"}` | Caller cut in — drop queued playback |
 | `{"type":"turn.timings","firstAudioMs":N}` | Last inbound audio → first audio back |
 | `{"type":"error","code":…,"message":…,"isFatal":bool}` | Non-fatal errors are normal; log and continue |
-| `{"type":"session.closed","reason":"…"}` | Terminal: `user_hangup`, `timeout`, `error`, `completed`, `provider_closed` |
+| `{"type":"session.closed","reason":"…"}` | Terminal: `user_hangup`, `timeout`, `error`, `completed`, `provider_closed`; on avatar calls also `avatar_busy`, `avatar_unavailable` (§8) |
 
 ## 3. The three things people get wrong
 
@@ -201,3 +205,184 @@ accented. Supports custom voices: an id created through OpenAI's
 
 **Gemini Live** — markedly better non-English speech across 70+ languages;
 weaker barge-in. Prebuilt voices only.
+
+## 8. Avatar calls (a face that speaks)
+
+An agent can carry a lip-synced avatar. The caller sees a face and hears the
+agent's own voice (native realtime or an external TTS) coming out of it.
+
+### How it is wired — and why
+
+**Your client talks only to Assemblix, never to the avatar vendor.** Video cannot
+ride the voice WebSocket cheaply, so an avatar call adds a second connection:
+
+- the **WebSocket** stays exactly as in §2, but carries only control frames
+  (`session.ready`, transcripts, `speech.started`, `turn.timings`, `error`,
+  `session.closed`) — no binary audio in either direction;
+- the **media** (the caller's microphone up, the avatar's audio + video down) goes
+  through a **LiveKit** room hosted by the Assemblix deployment. The Assemblix
+  server joins it as `agent`, the avatar vendor joins it as `avatar`, your
+  browser joins it as `user`.
+
+Changing the avatar vendor is a server-side change; your client code does not move.
+
+### Prerequisites (one-time, not your code)
+
+1. The Assemblix server has LiveKit configured (`LIVEKIT_URL`,
+   `LIVEKIT_PUBLIC_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET`). Without it the
+   API rejects an avatar on the agent with `400 Avatars need LiveKit`.
+2. An avatar-provider credential (an **Anam** API key) is added in the Assemblix
+   UI under Credentials. Avatars are bring-your-own-key: the vendor bills that key.
+3. The agent has an avatar: `list_avatars(credential_id)` → pick an avatar and a
+   model → `update_voice_agent(voice_agent_id, avatar_credential_id=…,
+   avatar_id=…, avatar_model=…)` (or pass the same on `create_voice_agent`).
+   `remove_avatar=True` turns it back into a voice-only agent.
+
+### Your backend
+
+Identical to §1 — same endpoint, same `sk_` key, same 60-second token. The only
+difference is the response:
+
+```json
+{
+  "token": "eyJhbGciOi…",
+  "expiresIn": 60,
+  "media": {
+    "transport": "livekit",
+    "url": "wss://rtc.example.com",
+    "token": "eyJhbGciOi…"
+  }
+}
+```
+
+Return the whole object to your frontend. `media.token` lets its holder join that
+one room and publish a microphone — nothing else — so it is as safe to hand to the
+browser as `token`. It is also short-lived: join right away.
+
+```ts
+// Node / Express — your server
+app.post("/api/call", requireUser, async (req, res) => {
+  const r = await fetch(`${BASE}/api/voice-agents/${AGENT_ID}/sessions`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.ASSEMBLIX_SK}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ clientId: req.user.id }),
+  });
+  if (!r.ok) return res.status(r.status).send(await r.text());
+  res.json(await r.json()); // { token, expiresIn, media }
+});
+```
+
+### Your frontend
+
+`npm i livekit-client`. Order matters: **join the room and publish the mic first,
+then open the WebSocket.** The server waits (up to ~20 s) for your microphone and
+the avatar's video before it sends `session.ready`.
+
+```ts
+import { Room, RoomEvent, Track } from "livekit-client";
+
+export async function startAvatarCall(video: HTMLVideoElement) {
+  // Ask for the mic inside the click handler, before anything is minted.
+  const mic = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true },
+  });
+  const { token, media } = await fetch("/api/call", { method: "POST" }).then((r) => r.json());
+
+  let socket: WebSocket | null = null;
+  let avatarAudio: HTMLMediaElement | null = null;
+  const room = new Room({ adaptiveStream: true, dynacast: true });
+
+  const hangUp = () => {
+    room.removeAllListeners();
+    void room.disconnect();
+    avatarAudio?.remove();
+    mic.getTracks().forEach((t) => t.stop());
+    socket?.close();
+  };
+
+  room.on(RoomEvent.TrackSubscribed, (track, _pub, participant) => {
+    if (participant.identity !== "avatar") return;
+    if (track.kind === Track.Kind.Video) {
+      track.attach(video); // <video autoplay playsinline muted>
+    } else if (track.kind === Track.Kind.Audio) {
+      avatarAudio = track.attach(); // not muted: this is the agent's voice
+      avatarAudio.hidden = true;
+      document.body.appendChild(avatarAudio);
+    }
+  });
+  // The server deletes the room *before* it sends session.closed with a reason.
+  // Only treat a room disconnect as the end once the control socket is gone.
+  room.on(RoomEvent.Disconnected, () => {
+    if (!socket || socket.readyState !== WebSocket.OPEN) hangUp();
+  });
+
+  await room.connect(media.url, media.token);
+  await room.localParticipant.publishTrack(mic.getAudioTracks()[0]);
+
+  socket = new WebSocket(`wss://${BASE_HOST}/api/voice-agents/sessions/${token}/stream`);
+  socket.onmessage = (event) => {
+    if (typeof event.data !== "string") return; // no binary audio on avatar calls
+    const frame = JSON.parse(event.data);
+    switch (frame.type) {
+      case "session.ready":
+        // frame.media === "livekit": nothing to capture or play here — LiveKit does it.
+        showLive();
+        break;
+      case "transcript":
+        renderCaption(frame.role, frame.text, frame.isFinal);
+        break;
+      case "session.closed":
+        if (frame.reason === "avatar_busy") showError("The avatar is busy — try again in a minute.");
+        if (frame.reason === "avatar_unavailable") showError("The avatar could not start.");
+        hangUp();
+        break;
+    }
+  };
+  socket.onclose = hangUp;
+
+  return () => {
+    if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "session.stop" }));
+    hangUp();
+  };
+}
+```
+
+`showLive`, `renderCaption` and `showError` are yours. Barge-in needs no code on
+your side: when the caller talks over the avatar, the server stops it.
+
+### What goes wrong
+
+- **Capturing or playing audio over the WebSocket on an avatar call.** Nothing
+  arrives there and nothing you send is heard; the mic must be the LiveKit track.
+  Branch on `media` (mint response) or `session.ready.media`.
+- **Ending the call on the room's `Disconnected` while the socket is open.** On a
+  failure the server deletes the room first and sends the reason second; tearing
+  down on the room event loses the reason and the call just "stops".
+- **A muted or detached audio element.** The avatar's voice is its own audio track;
+  mute only the `<video>`. Safari can still block autoplay after long async gaps —
+  listen for `RoomEvent.AudioPlaybackStatusChanged` and call `room.startAudio()`
+  from a user gesture if `room.canPlaybackAudio` is false.
+- **A client watchdog shorter than the server's.** Setup takes a few seconds (the
+  avatar joins while the model connects); allow ~30 s before giving up.
+- **Redialing instantly after `avatar_busy`.** The vendor counts sessions per key
+  and releases them with a delay; a free plan may allow just one at a time.
+
+### Close reasons specific to avatars
+
+| Reason | Meaning | What to tell the user |
+| --- | --- | --- |
+| `avatar_busy` | The vendor refused a new session: its concurrency limit for that key is reached | Try again in a minute |
+| `avatar_unavailable` | Anything else: vendor error, LiveKit unreachable, the avatar or your mic did not join in time, the agent lost its avatar after the token was minted | The avatar could not start |
+
+### Limits in this version
+
+- Interrupting the avatar is most reliable with **OpenAI Realtime** voices. With
+  **Gemini Live** the avatar can only be interrupted while the model is still
+  generating its reply.
+- Latency: the avatar adds its render time on top of the voice round trip (about
+  a second in practice). It depends on the vendor and on where LiveKit runs
+  relative to the vendor and to your users.
+- Avatar minutes are billed by the vendor on your key, not by Assemblix.

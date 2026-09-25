@@ -64,4 +64,5 @@ def test_build_server_registers_all_tools():
         "list_executions",
         "list_project_state_variables",
         "set_project_state_variables",
+        "list_avatars",
     } <= names

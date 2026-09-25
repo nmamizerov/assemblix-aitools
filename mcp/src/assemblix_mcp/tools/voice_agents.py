@@ -53,6 +53,29 @@ def _build_config(
     }
 
 
+def _merge_avatar(
+    current: dict | None,
+    *,
+    provider: str | None,
+    credential_id: str | None,
+    avatar_id: str | None,
+    avatar_model: str | None,
+) -> dict | None:
+    """Overlay the avatar arguments that were passed onto the agent's current avatar.
+
+    Nothing passed means the current avatar (or its absence) stands.
+    """
+    if provider is None and credential_id is None and avatar_id is None and avatar_model is None:
+        return current
+    base = current or {"provider": "anam", "avatarModel": "", "avatarId": None, "credentialId": None}
+    return {
+        "provider": _keep(provider, base.get("provider", "anam")),
+        "avatarModel": _keep(avatar_model, base.get("avatarModel", "")),
+        "avatarId": _keep(avatar_id, base.get("avatarId")),
+        "credentialId": _keep(credential_id, base.get("credentialId")),
+    }
+
+
 def register_voice_agent_tools(mcp: FastMCP, get_client: GetClient) -> None:
     @mcp.tool
     async def list_conversation_voices() -> dict:
@@ -72,6 +95,23 @@ def register_voice_agent_tools(mcp: FastMCP, get_client: GetClient) -> None:
                 "voices": await client.list_provider_system_voices(name),
             }
         return catalog
+
+    @mcp.tool
+    async def list_avatars(credential_id: str, provider: str = "anam") -> dict:
+        """List what a voice agent's avatar can be set to: the provider's avatar
+        models and the avatars (faces) available to one avatar credential.
+
+        credential_id is an avatar-provider credential (an Anam API key) the user
+        added in the Assemblix UI under Credentials — it is BYO-only, there is no
+        platform key. Call this before create_voice_agent/update_voice_agent with
+        avatar_* arguments: avatar_id must be one of the returned avatars and
+        avatar_model one of the returned models' `avatarModel`."""
+        client = await get_client()
+        return {
+            "provider": provider,
+            "models": await client.list_avatar_models(provider),
+            "avatars": await client.list_credential_avatars(credential_id),
+        }
 
     @mcp.tool
     async def list_voice_agents() -> list:
@@ -101,6 +141,10 @@ def register_voice_agent_tools(mcp: FastMCP, get_client: GetClient) -> None:
         final_workflow_id: str | None = None,
         credential_id: str | None = None,
         params: dict | None = None,
+        avatar_credential_id: str | None = None,
+        avatar_id: str | None = None,
+        avatar_model: str | None = None,
+        avatar_provider: str = "anam",
     ) -> Any:
         """Create a voice agent.
 
@@ -120,25 +164,37 @@ def register_voice_agent_tools(mcp: FastMCP, get_client: GetClient) -> None:
         (a score, a profile, a running total), the call must be minted with a
         clientId — that is what binds the call and its hook runs to one client
         session, and so to one copy of project state. The guide covers it.
+
+        To give the agent a lip-synced face, pass avatar_credential_id, avatar_id
+        and avatar_model (all three, from list_avatars). The call's media then runs
+        through the Assemblix server's LiveKit, which must be configured, or the
+        API rejects the agent. Read the "Avatar calls" section of
+        assemblix://guides/voice-agents before writing the client.
         """
         client = await get_client()
-        return await client.create_voice_agent(
-            name=name,
-            description=description,
-            config=_build_config(
-                system_prompt=system_prompt,
-                provider=provider,
-                model=model,
-                voice_id=voice_id,
-                language=language,
-                first_message=first_message,
-                knowledge_base_ids=knowledge_base_ids,
-                turn_workflow_id=turn_workflow_id,
-                final_workflow_id=final_workflow_id,
-                credential_id=credential_id,
-                params=params,
-            ),
+        config = _build_config(
+            system_prompt=system_prompt,
+            provider=provider,
+            model=model,
+            voice_id=voice_id,
+            language=language,
+            first_message=first_message,
+            knowledge_base_ids=knowledge_base_ids,
+            turn_workflow_id=turn_workflow_id,
+            final_workflow_id=final_workflow_id,
+            credential_id=credential_id,
+            params=params,
         )
+        avatar = _merge_avatar(
+            None,
+            provider=avatar_provider if avatar_id or avatar_credential_id or avatar_model else None,
+            credential_id=avatar_credential_id,
+            avatar_id=avatar_id,
+            avatar_model=avatar_model,
+        )
+        if avatar is not None:
+            config["avatar"] = avatar
+        return await client.create_voice_agent(name=name, description=description, config=config)
 
     @mcp.tool
     async def update_voice_agent(
@@ -157,13 +213,22 @@ def register_voice_agent_tools(mcp: FastMCP, get_client: GetClient) -> None:
         credential_id: str | None = None,
         params: dict | None = None,
         is_active: bool | None = None,
+        avatar_credential_id: str | None = None,
+        avatar_id: str | None = None,
+        avatar_model: str | None = None,
+        avatar_provider: str | None = None,
+        remove_avatar: bool = False,
     ) -> Any:
         """Change a voice agent. Only the fields you pass are touched — the rest
         are read from the current agent and written back unchanged, so a prompt
         edit cannot silently reset the voice.
 
         Note the API replaces the whole config object, so this tool reads before
-        it writes; two concurrent edits will not merge.
+        it writes; two concurrent edits will not merge. Config fields this tool has
+        no argument for (an external `tts` voice, future ones) are carried over.
+
+        avatar_* arguments change only the avatar fields passed (see list_avatars);
+        remove_avatar=True turns the agent back into a voice-only agent.
         """
         client = await get_client()
         current = await client.get_voice_agent(voice_agent_id)
@@ -171,7 +236,8 @@ def register_voice_agent_tools(mcp: FastMCP, get_client: GetClient) -> None:
         voice = config.get("voice", {})
         instructions = config.get("instructions") or [{"role": "system", "content": ""}]
 
-        merged = _build_config(
+        # Start from the stored config so keys this tool does not rebuild survive.
+        merged = {**config, **_build_config(
             system_prompt=_keep(system_prompt, instructions[0].get("content", "")),
             provider=_keep(provider, voice.get("provider", "openai")),
             model=_keep(model, voice.get("model", "")),
@@ -183,6 +249,17 @@ def register_voice_agent_tools(mcp: FastMCP, get_client: GetClient) -> None:
             final_workflow_id=_keep(final_workflow_id, config.get("finalWorkflowId")),
             credential_id=_keep(credential_id, voice.get("credentialId")),
             params=_keep(params, config.get("params", {})),
+        )}
+        merged["avatar"] = (
+            None
+            if remove_avatar
+            else _merge_avatar(
+                config.get("avatar"),
+                provider=avatar_provider,
+                credential_id=avatar_credential_id,
+                avatar_id=avatar_id,
+                avatar_model=avatar_model,
+            )
         )
         return await client.update_voice_agent(
             voice_agent_id,
