@@ -241,6 +241,13 @@ class AssemblixClient:
             "GET", f"/api/voice/providers/{provider}/system-voices"
         )
 
+    # --- avatars ---
+    async def list_avatar_models(self, provider: str) -> Any:
+        return await self._request("GET", f"/api/avatar/providers/{provider}/models")
+
+    async def list_credential_avatars(self, credential_id: str) -> Any:
+        return await self._request("GET", f"/api/avatar/credentials/{credential_id}/avatars")
+
 
 def _clean(d: dict) -> dict:
     return {k: v for k, v in d.items() if v is not None}
