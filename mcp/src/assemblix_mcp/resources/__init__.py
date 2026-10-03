@@ -48,7 +48,8 @@ def register_resources(mcp: FastMCP) -> None:
         token, the WebSocket audio protocol and the three things people get
         wrong with it, attaching analysis workflows, reading calls back, and
         avatar calls (a lip-synced face over the server's LiveKit, with a full
-        backend + frontend example).
+        backend + frontend example), and cascade mode (STT → LLM → TTS: when to
+        pick it, server prerequisites, recommended config, latency tuning).
         Read this before authoring a voice agent or writing any call client."""
         return _load_guide("voice-agents.md")
 
@@ -62,7 +63,9 @@ def register_resources(mcp: FastMCP) -> None:
             "2. A voice agent has NO graph. It is a prompt plus a voice; workflows "
             "attach only as background analysis. Do not confuse it with voice "
             "inside a workflow (the transcribe node), which is a different feature.\n"
-            "3. Author it with list_conversation_voices -> create_voice_agent. Never "
+            "3. Author it with list_conversation_voices -> create_voice_agent, or for "
+            "a cascade agent (STT -> LLM -> TTS; cheaper, better Russian) "
+            "list_cascade_options -> create_voice_agent(mode='cascade'). Never "
             "hand-write the nested `config` object; the tools assemble it. A "
             "provider/model/voice combination not in the catalog is rejected, and "
             "voice ids are case-sensitive.\n"

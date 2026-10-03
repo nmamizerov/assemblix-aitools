@@ -241,6 +241,10 @@ class AssemblixClient:
             "GET", f"/api/voice/providers/{provider}/system-voices"
         )
 
+    # --- LLM catalog (the text brain of a cascade voice agent) ---
+    async def list_llm_models(self, provider: str) -> Any:
+        return await self._request("GET", f"/api/llm/providers/{provider}/models")
+
     # --- avatars ---
     async def list_avatar_models(self, provider: str) -> Any:
         return await self._request("GET", f"/api/avatar/providers/{provider}/models")
