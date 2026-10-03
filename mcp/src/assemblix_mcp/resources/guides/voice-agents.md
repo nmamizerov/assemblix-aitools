@@ -3,7 +3,10 @@
 How to put a **voice agent** into your own product: mint a call token on your
 backend, open the WebSocket from your frontend, stream audio both ways, attach
 workflows that analyse the conversation, and read calls back afterwards. An agent
-can also have a lip-synced **avatar**; that call shape is covered in §8.
+can also have a lip-synced **avatar**; that call shape is covered in §8. An agent
+runs either on one speech-to-speech model (**realtime**, the default) or as a
+**cascade** of streaming STT → a text LLM → streaming TTS; the cascade is covered
+in §9. The call protocol is the same for both.
 
 > Source of truth: this mirrors the public docs pages `docs/voice-agents/*`.
 > `BASE` is your instance base URL (the same `ASSEMBLIX_API_URL` the MCP uses,
@@ -12,9 +15,11 @@ can also have a lip-synced **avatar**; that call shape is covered in §8.
 ## 0. What a voice agent is — and is not
 
 A voice agent is **not a workflow**. It has no graph. The caller's audio goes
-straight to a speech-to-speech model and the answer comes straight back, because
-anything on that path is heard as a pause. What you configure is a prompt, a
-voice, knowledge inlined into the prompt, and optional workflows that watch.
+straight to a speech-to-speech model (or, in cascade mode, through a streaming
+recognizer, a text model and a streaming synthesizer) and the answer comes straight
+back, because anything on that path is heard as a pause. What you configure is a
+prompt, a voice, knowledge inlined into the prompt, and optional workflows that
+watch.
 
 Do not confuse it with **voice inside a workflow** (the `transcribe` node, an
 agent node with voice output). That is one blob of audio in, one run, one answer.
@@ -95,14 +100,15 @@ why the token is in the path.
 | binary | Agent speech, PCM16 mono at `outputSampleRate` |
 | `{"type":"transcript","role":"user"\|"assistant","text":"…","isFinal":bool}` | Captions; non-final frames replace the previous one |
 | `{"type":"speech.started"}` | Caller cut in — drop queued playback |
-| `{"type":"turn.timings","firstAudioMs":N}` | Last inbound audio → first audio back |
+| `{"type":"turn.timings","firstAudioMs":N}` | Last inbound audio → first audio back; cascade calls add per-stage fields (§9) |
 | `{"type":"error","code":…,"message":…,"isFatal":bool}` | Non-fatal errors are normal; log and continue |
 | `{"type":"session.closed","reason":"…"}` | Terminal: `user_hangup`, `timeout`, `error`, `completed`, `provider_closed`; on avatar calls also `avatar_busy`, `avatar_unavailable` (§8) |
 
 ## 3. The three things people get wrong
 
 **Sample rates are not a constant.** OpenAI Realtime is 24 kHz both ways; Gemini
-Live listens at 16 kHz and answers at 24 kHz. They arrive in `session.ready` and
+Live listens at 16 kHz and answers at 24 kHz; a cascade listens at 16 kHz and
+answers at its TTS provider's rate. They arrive in `session.ready` and
 change if the agent's provider changes. Build the capture graph at
 `inputSampleRate` and play back at `outputSampleRate` — `new AudioContext({
 sampleRate })` converts natively. Never resample by hand.
@@ -192,8 +198,9 @@ call is rarely what you would predict from reading its instructions.
 
 ## 6. Cost
 
-A call is billed by wall-clock time at the model's per-minute price, which
-`list_conversation_voices` reports next to each model. Long knowledge bases cost
+A realtime call is billed by wall-clock time at the model's per-minute price,
+which `list_conversation_voices` reports next to each model. A cascade call is
+billed per stage — recognized minutes, LLM tokens, synthesized characters — see §9. Long knowledge bases cost
 money on every call and slow the first reply, because they are inlined into the
 prompt at session start rather than retrieved mid-call.
 
@@ -205,6 +212,14 @@ accented. Supports custom voices: an id created through OpenAI's
 
 **Gemini Live** — markedly better non-English speech across 70+ languages;
 weaker barge-in. Prebuilt voices only.
+
+**Cascade** (`mode="cascade"`, §9) — not a provider but a different engine:
+Yandex SpeechKit recognition, any OpenAI/Gemini/DeepSeek text model, a streaming
+TTS. An order of magnitude cheaper per hour, native Russian voices, audio stays
+with providers you choose, no provider session cap. The price is a few hundred
+milliseconds more per turn and a server that needs setup (§9). Pick it for
+Russian-language calls, long calls, high volume, or when the realtime providers
+are not an option for your data.
 
 ## 8. Avatar calls (a face that speaks)
 
@@ -386,3 +401,155 @@ your side: when the caller talks over the avatar, the server stops it.
   a second in practice). It depends on the vendor and on where LiveKit runs
   relative to the vendor and to your users.
 - Avatar minutes are billed by the vendor on your key, not by Assemblix.
+
+## 9. Cascade mode (STT → brain → TTS)
+
+A cascade agent does not hand the call to one speech-to-speech model. The
+Assemblix server runs the turn itself: a voice-activity model and **Smart Turn**
+decide when the caller has finished, **Yandex SpeechKit** streams the recognized
+text, a **text LLM** (the brain) streams a reply, and a **streaming TTS** speaks it
+sentence by sentence while the rest is still being written. Your client cannot
+tell the difference: same token, same WebSocket, same frames (§1–§3), avatars work
+the same way (§8).
+
+### When to choose it
+
+| | Realtime | Cascade |
+| --- | --- | --- |
+| Cost | per-minute model price | ~22–95 ₽ per hour of conversation, depending on the brain and how much the agent talks |
+| Russian | accented (OpenAI) to good (Gemini) | native Yandex voices |
+| Data | audio goes to OpenAI/Google | audio goes to Yandex; text to the LLM you pick |
+| Call length | capped by the provider's session limit | only your server's `VOICE_SESSION_MAX_SECONDS` |
+| Latency | lowest | a few hundred ms more per turn, if configured as below |
+| The model | fixed speech-to-speech model | any OpenAI / Gemini / DeepSeek text model |
+
+### Server prerequisites (self-host)
+
+A cascade call that cannot start ends with `session.closed` before
+`session.ready`. Check these once per deployment:
+
+1. **Turn-detection weights** (Silero VAD + Smart Turn v3, ONNX). The Docker image
+   downloads them at build time into `/opt/turn-models` (`TURN_MODELS_DIR`).
+   Running natively: `make turn-models` in `assemblix-app-api`. Missing → reason
+   `setup_failed`.
+2. **Yandex SpeechKit** for recognition and the default voice:
+   `SYSTEM_YANDEX_SPEECHKIT_API_KEY` + `SYSTEM_YANDEX_SPEECHKIT_FOLDER_ID`, or a
+   Yandex credential in the UI passed as `stt_credential_id` / `tts_credential_id`.
+3. **The brain's LLM key**: `SYSTEM_GEMINI_API_KEY` (or the OpenAI / DeepSeek
+   one), or a credential passed as `brain_credential_id`. `GEMINI_API_BASE_URL`
+   routes Gemini through a proxy — and its distance is added to every turn.
+4. **Call length**: `VOICE_SESSION_MAX_SECONDS` defaults to 600 (10 minutes), after
+   which the call closes with `timeout`. Raise it (e.g. 3600) for long calls.
+
+### Recommended config
+
+`create_voice_agent(mode="cascade", …)` with nothing else gives this (the
+essential part of the config it writes):
+
+```json
+{
+  "mode": "cascade",
+  "voice": null,
+  "tts": { "provider": "yandex", "model": "yandex-tts-v3-chunk", "voiceId": "alena", "realtime": true },
+  "cascade": {
+    "stt": { "provider": "yandex", "model": "general" },
+    "turn": {},
+    "brain": {
+      "type": "prompt",
+      "provider": "gemini",
+      "model": "gemini-3.1-flash-lite",
+      "params": { "thinking_level": "minimal", "max_tokens": 300 }
+    }
+  }
+}
+```
+
+Choose other parts with `list_cascade_options`:
+
+- **TTS must be a streaming model** — only those `list_cascade_options` lists
+  under `tts`. `yandex-tts-v3-chunk` is the cheapest: it speaks the first
+  sentence at once and packs the rest into ~250-character requests.
+  `yandex-tts-v3` synthesizes sentence by sentence for the most natural
+  intonation; `yandex-tts-v3-stream` has the lowest time to first audio. ElevenLabs
+  streaming models work too, at ElevenLabs prices. Yandex voices: `alena`,
+  `filipp`, `ermil`, `jane`, `omazh`, `zahar`, `dasha`, …
+- **The brain** is a plain chat model. Keep it small and fast; a large model's
+  intelligence is heard as silence. `brain_params` are the provider's usual
+  parameters: `thinking_level` (Gemini 3) and `max_tokens` matter most.
+  `history_turns` (default 40) is how many messages stay in its context verbatim.
+
+### Writing the prompt for a cascade
+
+The brain is a text model that does not know it is being read aloud. Measured on
+a live instance with default thinking and a chat-style prompt: 1.4–3.7 s to the
+first token, and long markdown replies read out in full. Hence the defaults —
+`thinking_level: "minimal"`, `max_tokens: 300` — and a prompt that tells it:
+
+- it is on a phone call and everything it writes is spoken;
+- 1–3 short sentences per reply, one question at a time;
+- no markdown, lists, headings, emoji, links, or tables;
+- numbers, dates and abbreviations as they should be pronounced.
+
+Keep `max_tokens` around 300 as a backstop: a runaway reply is a monologue the
+caller has to interrupt.
+
+### Tuning end of turn
+
+After `min_silence_ms` of silence (default 200) Smart Turn looks at the
+utterance and says whether it sounds finished. If the probability reaches
+`smart_turn_threshold` (default 0.5) the turn ends there; if not, the server
+waits until `max_silence_ms` (default 1500) of silence. With `smart_turn=False`
+every turn waits the full `max_silence_ms`.
+
+- **The agent cuts callers off** → raise `min_silence_ms` (300–500) or
+  `smart_turn_threshold` (0.6–0.7).
+- **Long pauses before every reply** → check `eouMs` (below). Near
+  `max_silence_ms` means Smart Turn keeps saying "not finished": lower
+  `max_silence_ms` (1000–1200) or `smart_turn_threshold`.
+
+Known limitation: on hesitant speech ("um… so… I'd like…") Smart Turn may judge
+the utterance unfinished and the server waits the whole `max_silence_ms`. That
+is the trade-off between cutting people off and waiting; tune for your callers.
+
+### Reading the timings
+
+Every cascade reply sends one `turn.timings` frame:
+
+```json
+{ "type": "turn.timings", "eouMs": 220, "sttFinalMs": 90, "brainFirstTokenMs": 480,
+  "ttsFirstAudioMs": 310, "totalMs": 1100, "firstAudioMs": 1100 }
+```
+
+`get_voice_call` returns the same per reply (`timings` on each assistant line of
+the transcript) and `timingSummary` — `{stage: {p50, p95}}` for the whole call.
+Read p95 before p50: callers remember the worst pause.
+
+| Stage | Measures | When it is slow |
+| --- | --- | --- |
+| `eouMs` | caller stops → server decides the turn is over | see "Tuning end of turn" |
+| `sttFinalMs` | turn over → final recognized text (gives up after 0.3 s and uses the partial) | the SpeechKit endpoint is far away or overloaded; a proxy in `YANDEX_STT_V3_GRPC_ENDPOINT` adds its hop |
+| `brainFirstTokenMs` | text sent to the LLM → first token back | thinking (set `thinking_level: "minimal"`), a long prompt or knowledge base, a large model, or a distant `GEMINI_API_BASE_URL` proxy |
+| `ttsFirstAudioMs` | first token → first audio frame sent | try `yandex-tts-v3-stream`; a reply that opens with a long sentence waits for that sentence |
+| `totalMs` / `firstAudioMs` | caller stops → first audio | the sum of the above |
+
+In practice the brain is the stage that goes wrong. Fix it first.
+
+### When a cascade call fails
+
+| You see | Meaning | Fix |
+| --- | --- | --- |
+| `session.closed` `setup_failed` before `session.ready` | The server could not build the pipeline — most often the turn-detection weights are missing | Prerequisite 1; the server log says which |
+| `session.closed` with a sentence as the reason, before `session.ready` | Configuration rejected: e.g. `Voice model … has no streaming route`, `System API key for … is not configured` | Pick a streaming TTS; set the key or pass a credential |
+| `error` `stt_unavailable` / `stt_failed`, `isFatal: true`, then `session.closed` `error` | Recognition could not start or died mid-call | SpeechKit key, folder id, network to Yandex |
+| `error` `tts_unavailable`, `isFatal: true`, then `session.closed` `error` | The synthesizer failed | TTS key, voice id, network to the provider |
+| `error` `brain_timeout`, `isFatal: false` | No reply text within 5 s; that turn gets no answer, the call goes on | Thinking, prompt size, model, proxy — see `brainFirstTokenMs` |
+| `error` `brain_failed`, `isFatal: false` | The LLM call failed (key, model id, a rejected param); the call goes on | Check `brain_model` and `brain_params` against `list_cascade_options` |
+
+### Limits in this version
+
+- Recognition is Yandex SpeechKit only; it is strongest in Russian.
+- The brain is a prompt with knowledge inlined, like a realtime agent; it cannot
+  call tools mid-call. Analysis workflows (§4) work as usual.
+- Barge-in is detected by the server: when the caller speaks over the agent,
+  `speech.started` arrives as usual, and the brain remembers only the part of its
+  reply the caller actually heard.

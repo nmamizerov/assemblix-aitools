@@ -60,15 +60,15 @@ For the hosted server, use your client's "add custom connector → URL + header"
 `list_executions`, `get_execution_detail`, `list_in_flight`
 **Project state:** `list_project_state_variables`, `set_project_state_variables`,
 `upsert_project_state_variable`, `delete_project_state_variable`
-**Voice agents:** `list_conversation_voices`, `list_avatars`, `list_voice_agents`,
-`get_voice_agent`, `create_voice_agent`, `update_voice_agent`, `delete_voice_agent`,
-`list_voice_calls`, `get_voice_call`
+**Voice agents:** `list_conversation_voices`, `list_cascade_options`, `list_avatars`,
+`list_voice_agents`, `get_voice_agent`, `create_voice_agent`, `update_voice_agent`,
+`delete_voice_agent`, `list_voice_calls`, `get_voice_call`
 
 **Resources:** `assemblix://examples/minimal`, `assemblix://examples/branching`
 (example workflow JSON), `assemblix://guides/execution` (how to call a workflow from
 your product — sync/async/streaming/sessions/voice, with curl/JS/Python examples),
 `assemblix://guides/voice-agents` (what a voice agent is, the call WebSocket protocol,
-analysis hooks, reading calls back, avatar calls over LiveKit).
+analysis hooks, reading calls back, avatar calls over LiveKit, cascade mode).
 **Prompts:** `author_workflow`, `integrate_workflow`, `integrate_voice_agent`.
 
 Workflow lifecycle: `create_workflow → update_workflow(nodes, edges) →
@@ -76,9 +76,12 @@ publish_workflow → run_workflow`. Runs always execute the **published** snapsh
 AGENT nodes need a provider credential configured in the Assemblix UI.
 
 A **voice agent** is a different thing: no graph, no publish step — a prompt plus a
-speech-to-speech voice, answering a live call. Workflows attach to it only as
-background analysis. Build one with `list_conversation_voices → create_voice_agent`,
-then iterate on real calls with `list_voice_calls` / `get_voice_call`.
+voice, answering a live call. Workflows attach to it only as background analysis.
+The voice is either one speech-to-speech model (`realtime`, built with
+`list_conversation_voices → create_voice_agent`) or a **cascade** of streaming STT →
+a text LLM → streaming TTS (`list_cascade_options → create_voice_agent(mode="cascade")`),
+which is cheaper and stronger in Russian. Iterate on real calls with
+`list_voice_calls` / `get_voice_call`.
 
 All tools operate on the single project your API key is scoped to; `projectId` is
 never a parameter.
