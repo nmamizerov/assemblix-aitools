@@ -48,3 +48,14 @@ async def test_list_in_flight():
         return_value=httpx.Response(200, json=[{"id": "e1", "status": "RUNNING"}])
     )
     assert await _client().list_in_flight() == [{"id": "e1", "status": "RUNNING"}]
+
+
+@respx.mock
+async def test_get_cost_summary_sends_dates():
+    route = respx.get("http://api.test/api/executions/cost-summary").mock(
+        return_value=httpx.Response(200, json={"totalRuns": 0, "days": []})
+    )
+    await _client().get_cost_summary(since="2026-10-01")
+    params = route.calls.last.request.url.params
+    assert params["since"] == "2026-10-01"
+    assert "until" not in params
