@@ -44,6 +44,12 @@ class AssemblixClient:
     async def list_node_types(self) -> Any:
         return await self._request("GET", "/api/nodes")
 
+    # --- credentials ---
+    async def list_credentials(self, type: str | None = None) -> Any:
+        return await self._request(
+            "GET", "/api/credentials/", params=_clean({"type": type}) or None
+        )
+
     # --- project state schema ---
     async def get_project_state_schema(self) -> Any:
         return await self._request("GET", "/api/projects/state")

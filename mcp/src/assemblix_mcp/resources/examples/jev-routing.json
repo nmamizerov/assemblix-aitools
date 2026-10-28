@@ -1,0 +1,113 @@
+{
+  "name": "Jev validator + router",
+  "description": "START -> JEV (yes/no topic validator + choice state router in one request) -> CONDITION on input.jev.* -> AGENT branches -> END. The jev node never branches itself; the condition after it does. Replace credentialId with an id from list_credentials(type='typesafe_token').",
+  "nodes": [
+    {
+      "id": "start-1",
+      "type": "start",
+      "position": { "x": 0, "y": 0 },
+      "config": { "firstPhrase": null, "acceptVoice": false }
+    },
+    {
+      "id": "jev-1",
+      "type": "jev",
+      "position": { "x": 320, "y": 0 },
+      "config": {
+        "credentialId": "<typesafe-credential-id from list_credentials>",
+        "model": "jev-latest",
+        "state": "{{ input.message }}",
+        "questions": [
+          {
+            "name": "relevant",
+            "type": "noul",
+            "instructions": "The message is about our product's support and is meaningful text.",
+            "trueCriteria": "A real question or request related to the product",
+            "falseCriteria": "Off-topic, spam, or gibberish"
+          },
+          {
+            "name": "stage",
+            "type": "choice",
+            "instructions": "Which stage of the customer journey is the user in?",
+            "options": [
+              { "name": "billing", "description": "Payments, invoices, refunds, plans" },
+              { "name": "onboarding", "description": "Getting started, setup, first steps" },
+              { "name": "other", "description": "Anything else" }
+            ]
+          }
+        ],
+        "longContext": false,
+        "outputKey": "jev"
+      }
+    },
+    {
+      "id": "cond-1",
+      "type": "condition",
+      "position": { "x": 640, "y": 0 },
+      "config": {
+        "conditions": [
+          { "name": "off topic", "expression": "input.jev.relevant.noul < 0.5" },
+          {
+            "name": "billing",
+            "expression": "input.jev.stage.choice == 'billing' && input.jev.stage.confidence >= 0.5"
+          }
+        ]
+      }
+    },
+    {
+      "id": "agent-offtopic",
+      "type": "agent",
+      "position": { "x": 960, "y": -200 },
+      "config": {
+        "name": "Off-topic reply",
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "instructions": [
+          { "role": "system", "content": "Politely say you can only help with product support and ask the user to rephrase." }
+        ]
+      }
+    },
+    {
+      "id": "agent-billing",
+      "type": "agent",
+      "position": { "x": 960, "y": 0 },
+      "config": {
+        "name": "Billing helper",
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "instructions": [
+          { "role": "system", "content": "You handle billing questions. Be concise." }
+        ]
+      }
+    },
+    {
+      "id": "agent-general",
+      "type": "agent",
+      "position": { "x": 960, "y": 200 },
+      "config": {
+        "name": "General helper",
+        "provider": "openai",
+        "model": "gpt-4o-mini",
+        "instructions": [
+          { "role": "system", "content": "Answer the user's message helpfully." }
+        ]
+      }
+    },
+    {
+      "id": "end-1",
+      "type": "end",
+      "position": { "x": 1280, "y": 0 },
+      "config": { "name": "Done", "outputMode": "last_agent" }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "start-1", "target": "jev-1" },
+    { "id": "e2", "source": "jev-1", "target": "cond-1" },
+    { "id": "e3", "source": "cond-1", "target": "agent-offtopic", "sourceHandle": "source_cond-1_0" },
+    { "id": "e4", "source": "cond-1", "target": "agent-billing", "sourceHandle": "source_cond-1_1" },
+    { "id": "e5", "source": "cond-1", "target": "agent-general", "sourceHandle": "source_cond-1_2" },
+    { "id": "e6", "source": "agent-offtopic", "target": "end-1" },
+    { "id": "e7", "source": "agent-billing", "target": "end-1" },
+    { "id": "e8", "source": "agent-general", "target": "end-1" }
+  ],
+  "state": []
+}

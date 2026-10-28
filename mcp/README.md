@@ -63,9 +63,11 @@ For the hosted server, use your client's "add custom connector → URL + header"
 **Voice agents:** `list_conversation_voices`, `list_cascade_options`, `list_avatars`,
 `list_voice_agents`, `get_voice_agent`, `create_voice_agent`, `update_voice_agent`,
 `delete_voice_agent`, `list_voice_calls`, `get_voice_call`
+**Credentials:** `list_credentials` (id, name and type only — never the secret)
 
-**Resources:** `assemblix://examples/minimal`, `assemblix://examples/branching`
-(example workflow JSON), `assemblix://guides/execution` (how to call a workflow from
+**Resources:** `assemblix://examples/minimal`, `assemblix://examples/branching`,
+`assemblix://examples/jev-routing` (example workflow JSON — the last one validates and
+routes messages with a `jev` node), `assemblix://guides/execution` (how to call a workflow from
 your product — sync/async/streaming/sessions/voice, with curl/JS/Python examples),
 `assemblix://guides/voice-agents` (what a voice agent is, the call WebSocket protocol,
 analysis hooks, reading calls back, avatar calls over LiveKit, cascade mode).
@@ -73,7 +75,8 @@ analysis hooks, reading calls back, avatar calls over LiveKit, cascade mode).
 
 Workflow lifecycle: `create_workflow → update_workflow(nodes, edges) →
 publish_workflow → run_workflow`. Runs always execute the **published** snapshot.
-AGENT nodes need a provider credential configured in the Assemblix UI.
+AGENT nodes need a provider credential configured in the Assemblix UI; `jev` nodes need
+a TypeSafe credential id, which `list_credentials(type="typesafe_token")` returns.
 
 A **voice agent** is a different thing: no graph, no publish step — a prompt plus a
 voice, answering a live call. Workflows attach to it only as background analysis.

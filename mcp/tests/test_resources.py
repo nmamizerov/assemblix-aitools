@@ -54,3 +54,28 @@ async def test_integrate_workflow_prompt_registered():
     async with MCPClient(_server()) as c:
         prompts = await c.list_prompts()
     assert any(p.name == "integrate_workflow" for p in prompts)
+
+
+async def test_jev_routing_example_is_valid_workflow():
+    async with MCPClient(_server()) as c:
+        contents = await c.read_resource("assemblix://examples/jev-routing")
+    data = json.loads(contents[0].text)
+    nodes = {n["id"]: n for n in data["nodes"]}
+    assert {n["type"] for n in nodes.values()} == {"start", "jev", "condition", "agent", "end"}
+    jev = next(n for n in nodes.values() if n["type"] == "jev")
+    question_types = {q["type"] for q in jev["config"]["questions"]}
+    assert {"noul", "choice"} <= question_types
+    condition = next(n for n in nodes.values() if n["type"] == "condition")
+    assert all("input.jev." in c["expression"] for c in condition["config"]["conditions"])
+    for edge in data["edges"]:
+        assert edge["source"] in nodes and edge["target"] in nodes
+        if edge["source"] == condition["id"]:
+            assert edge["sourceHandle"].startswith(f"source_{condition['id']}_")
+
+
+async def test_author_prompt_mentions_jev():
+    async with MCPClient(_server()) as c:
+        prompt = await c.get_prompt("author_workflow")
+    text = prompt.messages[0].content.text
+    assert "jev" in text
+    assert "list_credentials" in text
