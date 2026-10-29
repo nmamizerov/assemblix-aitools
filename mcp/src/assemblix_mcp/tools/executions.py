@@ -113,3 +113,12 @@ def register_execution_tools(mcp: FastMCP, get_client: GetClient) -> None:
         """List runs currently QUEUED or RUNNING in the project."""
         client = await get_client()
         return await client.list_in_flight()
+
+    @mcp.tool
+    async def get_cost_summary(since: str, until: str | None = None) -> Any:
+        """Spend report for the project: number of workflow runs, failed runs,
+        platform credits, own-key provider cost in USD and LLM tokens from `since`
+        (YYYY-MM-DD, inclusive) to `until` (inclusive, defaults to today), plus a
+        per-day breakdown. Days are UTC; debug runs are excluded."""
+        client = await get_client()
+        return await client.get_cost_summary(since=since, until=until)

@@ -171,6 +171,10 @@ class AssemblixClient:
     async def list_in_flight(self) -> Any:
         return await self._request("GET", "/api/executions/in-flight")
 
+    async def get_cost_summary(self, since: str, until: str | None = None) -> Any:
+        params = _clean({"since": since, "until": until})
+        return await self._request("GET", "/api/executions/cost-summary", params=params)
+
     # --- voice agents ---
     async def list_voice_agents(self) -> Any:
         return await self._request("GET", "/api/voice-agents/")
