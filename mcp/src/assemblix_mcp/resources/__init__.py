@@ -33,6 +33,13 @@ def register_resources(mcp: FastMCP) -> None:
         condition branch edges use sourceHandle 'source_<conditionId>_<index>'."""
         return _load("branching.json")
 
+    @mcp.resource("assemblix://examples/jev-routing")
+    def jev_routing_example() -> str:
+        """A START -> JEV -> CONDITION -> AGENT branches -> END workflow: one jev
+        request validates the message (yes/no) and picks the user's stage (choice);
+        the condition after it branches on input.jev.<name>.*."""
+        return _load("jev-routing.json")
+
     @mcp.resource("assemblix://guides/execution")
     def execution_guide() -> str:
         """How to integrate Assemblix workflow execution into a product: the
@@ -140,5 +147,13 @@ def register_resources(mcp: FastMCP) -> None:
             "acceptsAudio in list_node_types: Gemini (handles text AND audio) or OpenAI "
             "gpt-audio/gpt-audio-mini (audio-ONLY — set that agent's audioInput='audio' and "
             "always feed audio; a text turn 400s). Otherwise put a transcribe node before a "
-            "text-only agent."
+            "text-only agent.\n"
+            "7. Classification, validation and routing (is the message on-topic? which "
+            "stage is the user in? how urgent?): prefer a `jev` node over an AGENT — one "
+            "fast, cheap request with typed answers. It needs a TypeSafe credential id: "
+            "list_credentials(type='typesafe_token') (the user creates it in the UI). Ask "
+            "noul (yes/no), choice or score questions, then branch with a CONDITION on "
+            "input.jev.<name>.noul / .choice / .score / .confidence — the jev node never "
+            "branches itself. Start with noul > 0.7 and confidence >= 0.5, write questions "
+            "in English. See assemblix://examples/jev-routing."
         )

@@ -8,6 +8,7 @@ from fastmcp.server.dependencies import get_http_headers
 from assemblix_mcp.client import AssemblixClient
 from assemblix_mcp.config import Settings, resolve_api_key
 from assemblix_mcp.resources import register_resources
+from assemblix_mcp.tools.credentials import register_credential_tools
 from assemblix_mcp.tools.executions import register_execution_tools
 from assemblix_mcp.tools.projects import register_project_tools
 from assemblix_mcp.tools.voice_agents import register_voice_agent_tools
@@ -26,6 +27,7 @@ def build_server(settings: Settings) -> FastMCP:
     register_project_tools(mcp, get_client)
     register_execution_tools(mcp, get_client)
     register_voice_agent_tools(mcp, get_client)
+    register_credential_tools(mcp, get_client)
     register_resources(mcp)
     return mcp
 

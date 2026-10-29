@@ -15,7 +15,7 @@ def register_workflow_tools(mcp: FastMCP, get_client: GetClient) -> None:
     @mcp.tool
     async def list_node_types() -> list:
         """List available node types with their config schemas, for building a
-        workflow graph. Note: START is implicit and not listed here — see the
+        workflow graph (agent, condition, jev, http_request, ...). Note: START is implicit and not listed here — see the
         example workflows (resources) for its shape and the create->update->
         publish->run lifecycle."""
         client = await get_client()
